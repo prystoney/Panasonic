@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panasonic Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDKs (Compat Version for stability) -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { background: #1e3a8a; color: white; border-color: #1e3a8a; }
+        .modal-bg { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); }
+        .table-container { max-height: calc(100vh - 350px); overflow-y: auto; }
+        input:focus, select:focus { outline: 2px solid #1e3a8a; border-color: transparent; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .syncing { animation: pulse-soft 2s infinite; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-12">
+
+    <!-- Header -->
+    <header class="bg-[#1e3a8a] text-white p-6 shadow-2xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 p-4 opacity-10">
+            <svg width="120" height="120" viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.97 4.44c-.31.17-.69.17-1 0L3.53 17.38c-.32-.17-.53-.5-.53-.88V7.5c0-.38.21-.71.53-.88l7.97-4.44c.31-.17.69-.17 1 0l7.97 4.44c.32.17.53.5.53.88v9z"/></svg>
+        </div>
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 relative z-10">
+            <div class="flex items-center gap-4">
+                <div class="bg-white p-3 rounded-2xl shadow-lg">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1e3a8a" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black uppercase italic tracking-tighter">PANASONIC junior merchandise</h1>
+                    <div class="flex items-center gap-2 text-[10px] font-mono opacity-80 mt-1">
+                        <span id="cloudStatus" class="flex items-center gap-1">
+                            <span class="w-2 h-2 bg-green-400 rounded-full"></span> CLOUD SECURED
+                        </span>
+                        <span class="opacity-30">|</span>
+                        <span>v2.1.0-STABLE</span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-blue-900/40 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-right min-w-[200px]">
+                <p class="text-[10px] uppercase font-black opacity-60 tracking-widest mb-1">Total Net Profit</p>
+                <p id="headerProfit" class="text-3xl font-black text-green-400 font-mono tracking-tighter">Ksh 0</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="bg-white border-b sticky top-0 z-40 flex justify-center gap-1 md:gap-4 py-3 shadow-md px-4">
+        <button onclick="switchTab('sales')" id="btn-sales" class="tab-btn px-4 md:px-8 py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all tab-active border-2 border-transparent">Point of Sale</button>
+        <button onclick="switchTab('inventory')" id="btn-inventory" class="tab-btn px-4 md:px-8 py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all text-slate-500 hover:bg-slate-50 border-2 border-transparent">Inventory & Cloud</button>
+        <button onclick="switchTab('reports')" id="btn-reports" class="tab-btn px-4 md:px-8 py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all text-slate-500 hover:bg-slate-50 border-2 border-transparent">Financial Reports</button>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-4 md:p-6">
+        
+        <!-- POS SECTION -->
+        <section id="tab-sales" class="tab-content grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+            <div class="lg:col-span-2 space-y-4">
+                <div class="flex flex-col md:flex-row gap-3">
+                    <div class="relative flex-1">
+                        <input type="text" id="posSearch" placeholder="Search by name..." onkeyup="renderPOS()" class="w-full px-6 py-4 rounded-2xl border-none ring-1 ring-slate-200 shadow-sm outline-none pl-12 text-sm font-medium">
+                        <svg class="absolute left-4 top-4 text-slate-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </div>
+                    <select id="posCatFilter" onchange="renderPOS()" class="bg-white px-4 py-4 rounded-2xl ring-1 ring-slate-200 shadow-sm text-xs font-black uppercase outline-none min-w-[150px]">
+                        <option value="All">All Categories</option>
+                        <option value="Cyber">Cyber Services</option>
+                        <option value="Bookshop">Bookshop</option>
+                        <option value="Drinks">Drinks</option>
+                        <option value="General">General</option>
+                    </select>
+                </div>
+                
+                <div id="posGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto max-h-[70vh] pr-2 custom-scrollbar">
+                    <!-- Products injected here -->
+                </div>
+            </div>
+            
+            <!-- Cart Sidebar -->
+            <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col h-[650px] sticky top-24 overflow-hidden">
+                <div class="p-5 bg-slate-50 border-b flex justify-between items-center">
+                    <h2 class="font-black text-xs uppercase tracking-widest text-slate-400">Current Order</h2>
+                    <button onclick="clearCart()" class="text-red-500 text-[10px] font-black uppercase hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors">Reset</button>
+                </div>
+                
+                <div id="cartList" class="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar">
+                    <!-- Cart items injected here -->
+                </div>
+                
+                <div class="p-6 bg-slate-50 border-t space-y-4 shadow-inner">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-400 text-[10px] uppercase tracking-widest">Payable Amount</span>
+                        <span id="cartTotal" class="text-3xl font-black text-[#1e3a8a] font-mono tracking-tighter">Ksh 0</span>
+                    </div>
+                    <button onclick="processCheckout()" id="checkoutBtn" class="w-full bg-[#1e3a8a] text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 hover:bg-blue-800 transition-all flex justify-center items-center gap-3 group">
+                        Confirm & Record Sale
+                        <svg class="group-hover:translate-x-1 transition-transform" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- INVENTORY SECTION -->
+        <section id="tab-inventory" class="tab-content hidden animate-in slide-in-from-bottom-4 duration-300">
+            <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+                <div class="p-8 border-b flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 uppercase italic tracking-tight">Cloud Inventory Manager</h2>
+                        <p class="text-xs text-slate-500 font-medium">Manage your product catalog. All changes are encrypted and saved to the cloud.</p>
+                    </div>
+                    <button onclick="openModal()" class="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-2 text-xs shadow-xl active:scale-95 transition-all hover:bg-black">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        REGISTER NEW ITEM
+                    </button>
+                </div>
+                <div class="table-container custom-scrollbar">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b text-[10px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10">
+                            <tr>
+                                <th class="px-8 py-5">Product Info</th>
+                                <th class="px-8 py-5">Category</th>
+                                <th class="px-8 py-5">Buy Price</th>
+                                <th class="px-8 py-5">Sell Price</th>
+                                <th class="px-8 py-5 text-green-600">Net Profit</th>
+                                <th class="px-8 py-5 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTableBody" class="divide-y divide-slate-100 font-bold text-slate-700">
+                            <!-- Rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="inventoryEmpty" class="hidden py-24 text-center flex flex-col items-center opacity-20">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M21 8V21H3V8"/><path d="M1 3H23V8H1V3ZM10 12H14"/></svg>
+                    <p class="mt-4 font-black text-sm uppercase">Cloud Storage Empty</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- REPORTS SECTION -->
+        <section id="tab-reports" class="tab-content hidden space-y-6 animate-in fade-in duration-500">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today's Revenue</p>
+                    <p id="todayRev" class="text-3xl font-black text-slate-900 mt-2 font-mono tracking-tighter">Ksh 0</p>
+                </div>
+                <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Transactions</p>
+                    <p id="totalTrans" class="text-3xl font-black text-slate-900 mt-2 font-mono tracking-tighter">0</p>
+                </div>
+                <div class="bg-green-600 text-white p-8 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative">
+                    <div class="absolute -right-4 -bottom-4 opacity-10">
+                        <svg width="120" height="120" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                    </div>
+                    <p class="text-[10px] font-black uppercase tracking-widest opacity-80">Life-Time Net Profit</p>
+                    <p id="reportTotalProf" class="text-3xl font-black font-mono tracking-tighter">Ksh 0</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xl">
+                <div class="p-6 bg-slate-50 border-b flex flex-col md:flex-row justify-between items-center gap-4">
+                    <h3 class="font-black text-xs uppercase tracking-widest text-slate-500">Global Sales Ledger</h3>
+                    <div class="flex gap-2">
+                        <input type="date" id="reportDate" onchange="renderReports()" class="text-[10px] font-black uppercase p-2 border rounded-lg outline-none">
+                        <button onclick="exportCSV()" class="bg-[#1e3a8a] text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-blue-800 transition-all">Download CSV Report</button>
+                    </div>
+                </div>
+                <div class="table-container custom-scrollbar">
+                    <table class="w-full text-left text-xs font-bold">
+                        <thead class="bg-slate-50 border-b font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10">
+                            <tr>
+                                <th class="px-8 py-5">Timestamp</th>
+                                <th class="px-8 py-5">Product Sold</th>
+                                <th class="px-8 py-5 text-center">Qty</th>
+                                <th class="px-8 py-5">Total Sale</th>
+                                <th class="px-8 py-5 text-green-600">Net Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesTableBody" class="divide-y divide-slate-100 text-slate-700">
+                            <!-- Sales logs injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- PRODUCT MODAL -->
+    <div id="itemModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-bg hidden">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
+            <div class="p-8 border-b bg-slate-50 flex justify-between items-center">
+                <div>
+                    <h3 id="modalTitle" class="text-xl font-black text-slate-800 uppercase italic tracking-tighter">Product Setup</h3>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">Cloud Synchronization Portal</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-300 hover:text-slate-900 p-2 hover:bg-slate-100 rounded-full transition-all">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="p-8 space-y-5">
+                <input type="hidden" id="editId">
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Product Description</label>
+                    <input type="text" id="itemName" placeholder="e.g., Coca Cola 500ml" class="w-full p-4 rounded-2xl border-none ring-1 ring-slate-200 font-bold bg-slate-50 text-sm focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Inventory Category</label>
+                    <select id="itemCat" class="w-full p-4 rounded-2xl border-none ring-1 ring-slate-200 font-bold bg-slate-50 text-sm focus:ring-2 focus:ring-blue-500 transition-all">
+                        <option value="Cyber">Cyber Services</option>
+                        <option value="Bookshop">Bookshop/Stationery</option>
+                        <option value="Drinks">Drinks/Soda</option>
+                        <option value="General">General Merchandise</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Buying Price</label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-4 text-xs font-black text-slate-300">Ksh</span>
+                            <input type="number" id="itemCost" placeholder="0" class="w-full p-4 pl-12 rounded-2xl border-none ring-1 ring-slate-200 font-bold bg-slate-50 text-sm focus:ring-2 focus:ring-blue-500 transition-all">
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Selling Price</label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-4 text-xs font-black text-slate-300">Ksh</span>
+                            <input type="number" id="itemPrice" placeholder="0" class="w-full p-4 pl-12 rounded-2xl border-none ring-1 ring-slate-200 font-bold bg-slate-50 text-sm focus:ring-2 focus:ring-blue-500 transition-all">
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="saveLoader" class="hidden text-center py-2 text-xs font-black text-blue-600 tracking-widest animate-pulse">
+                    ENCRYPTING & UPLOADING...
+                </div>
+
+                <button onclick="saveItem()" id="saveBtn" class="w-full bg-[#1e3a8a] text-white font-black py-5 rounded-2xl shadow-2xl hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    SYNC TO CLOUD
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let db, auth, user, appId;
+        let inventory = [], sales = [], cart = [];
+
+        // --- CORE INITIALIZATION (Rule 3) ---
+        async function init() {
+            try {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'panasonic-junior-erp-final';
+
+                // Sign in logic
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await auth.signInWithCustomToken(__initial_auth_token);
+                } else {
+                    await auth.signInAnonymously();
+                }
+
+                auth.onAuthStateChanged((u) => {
+                    user = u;
+                    if (user) {
+                        document.getElementById('cloudStatus').innerHTML = `<span class="w-2 h-2 bg-green-400 rounded-full"></span> CLOUD CONNECTED: ${user.uid.substring(0,6)}`;
+                        startSync();
+                    }
+                });
+
+                // Default tab
+                switchTab('sales');
+            } catch (
